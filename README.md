@@ -2,6 +2,13 @@
 
 軽量でゼロ依存のファジー検索（あいまい検索）ライブラリ。
 
+## 特徴
+
+- タイポ（スペルミス）があってもマッチする
+- バックエンド不要でクライアント側で動作
+- シンプルなAPI
+- 依存関係ゼロ
+
 ## インストール
 
 ```bash
@@ -46,10 +53,11 @@ const fuse = new Fuse(data, {
 })
 ```
 
-## 注意点
+## 日本語検索の注意点
 
-- **文字ベースの比較**: 「とうきょう」と「東京」はマッチしない
-- **解決策**: ひらがな読み用のフィールドを追加して検索対象に含める
+Fuse.jsは文字ベースの比較のため、「とうきょう」と「東京」はマッチしない。
+
+**解決策**: ひらがな読み用のフィールドを追加
 
 ```javascript
 const data = [
@@ -60,6 +68,38 @@ const fuse = new Fuse(data, {
   keys: ['name', 'yomi']  // 両方を検索対象に
 })
 ```
+
+## インデックスの事前作成と永続化
+
+大量データでは、インデックスを事前作成して保存すると初期化が高速になる。
+
+### インデックスの作成と保存
+
+```javascript
+import Fuse from 'fuse.js'
+import fs from 'fs'
+
+const options = { keys: ['title', 'director'] }
+const index = Fuse.createIndex(options.keys, data)
+
+// 保存
+const output = {
+  options,
+  data,
+  index: index.toJSON()
+}
+fs.writeFileSync('search-index.json', JSON.stringify(output))
+```
+
+### インデックスの読み込み
+
+```javascript
+const { options, data, index } = JSON.parse(fs.readFileSync('search-index.json'))
+const loadedIndex = Fuse.parseIndex(index)
+const fuse = new Fuse(data, options, loadedIndex)  // 高速に初期化
+```
+
+**注意**: インデックスはJSON形式（バイナリではない）。圧縮したい場合はgzipを使用。
 
 ## ブラウザでの使用
 
@@ -74,21 +114,53 @@ CDNから読み込み可能：
 ```javascript
 const fuse = new Fuse(data, { keys: ['title'], threshold: 0.4 })
 
+// inputイベントでIME変換中もリアルタイム検索
 searchInput.addEventListener('input', (e) => {
-  const query = e.target.value.trim()
-  const results = fuse.search(query)
+  const results = fuse.search(e.target.value.trim())
   // 結果を表示
 })
 ```
 
-`input` イベントを使うことで、IME変換中もリアルタイムに検索できる。
+## 向いているユースケース
+
+- ドキュメント/ブログ内検索
+- オートコンプリート
+- コマンドパレット（VSCodeのCmd+Pのような機能）
+- 連絡先・住所検索
+- 小規模ECの商品検索（数千件以下）
+
+## 向いていないユースケース
+
+| ケース | 代替案 |
+|--------|-------|
+| 大規模データ（10万件〜） | Elasticsearch, Algolia, Meilisearch |
+| リアルタイム更新が必要 | サーバーサイド検索 |
+| 完全一致が重要 | 通常のfilter/find |
 
 ## デモ
 
-`demo.html` を開くと、100本の映画データでファジー検索を試せる。
+映画検索デモを試せます：
 
 ```bash
 open demo.html
+```
+
+CLIで検索：
+
+```bash
+node build-index.js    # インデックス作成
+node search.js "宮崎"  # 検索
+```
+
+## ファイル構成
+
+```
+├── demo.html          # ブラウザデモ（100本の映画）
+├── movies-data.js     # 映画データ
+├── build-index.js     # インデックス作成スクリプト
+├── search.js          # CLI検索スクリプト
+├── search-index.json  # 永続化されたインデックス
+└── index.js           # 基本サンプル
 ```
 
 ## 参考
